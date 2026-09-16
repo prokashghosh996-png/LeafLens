@@ -5,9 +5,9 @@ import seaborn as sns
 
 from pathlib import Path
 
-dataset_path = Path(
-    r"D:\Download\leaf-image-procession\leaf-image-procession\archive\plantvillage dataset\color"
-)
+from dataset_config import TRAINING_DATASET_PATH
+
+dataset_path = TRAINING_DATASET_PATH
 
 train_ds, val_ds = tf.keras.utils.image_dataset_from_directory(
     dataset_path,
