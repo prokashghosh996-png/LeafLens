@@ -33,7 +33,7 @@ def get_image_paths(class_folder):
     return image_paths                  
 
                       
-folder = Path(r"D:\Download\leaf-image-procession\leaf-image-procession\archive\plantvillage dataset\color")
+folder = Path(r"C:\Users\USER\Desktop\leaf-image-procession\leaf-image-procession\archive\plantvillage dataset\color")
 
 
 class_folders = []
