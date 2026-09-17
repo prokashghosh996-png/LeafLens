@@ -3,7 +3,7 @@ import json
 
 # Use exactly the same dataset path as in train_plant_disease.py.
 dataset_path = Path(
-    r"C:\Users\USER\Desktop\LeafLens\color"
+    r"D:\LeafLens\color"
 )
 
 if not dataset_path.is_dir():
