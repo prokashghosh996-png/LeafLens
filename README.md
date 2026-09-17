@@ -1,6 +1,24 @@
 # LeafLens
 
-Plant leaf classification with a TensorFlow CNN and conditional Ollama vision review.
+Plant leaf classification with a TensorFlow CNN and Ollama visual health review.
+
+## Current Health Decision Policy
+
+The final health result now requires visual review. Normal predictions call Ollama
+for every image, including high-confidence dataset images. The former dataset
+shortcut has been removed.
+
+- **Diseased:** the CNN, independent visual assessment, and review agree on disease.
+- **No visible disease detected:** the assessments support a clear leaf without visible disease symptoms; this is not a guarantee of health.
+- **Uncertain - needs review:** low CNN confidence, disagreement, unclear visual assessment, unavailable Ollama, or review failure.
+
+The CNN class and its softmax confidence remain supporting information, not a
+replacement for the final health result. Both Ollama passes must provide a usable,
+consistent assessment. The CLI prints failure details and review reasons.
+
+Ollama sees the input image and supplied labels/results, not training images.
+Marks or discoloration alone do not prove disease. Historical results below
+describe the earlier policy and have not been rerun under this policy.
 
 ## Overview
 
@@ -32,7 +50,7 @@ Leaf images can contain similar colors, textures, and symptoms across different 
 ## Key Features
 
 - Custom TensorFlow/Keras CNN for plant-and-disease classification.
-- Confidence-based review routing with an adjustable 80% default threshold.
+- Visual review for every normal prediction, with an adjustable 80% CNN confidence threshold for accepting the final assessment.
 - Independent Qwen image assessment followed by a review of both outputs.
 - Code-enforced preservation of the CNN class and confidence.
 - Structured Ollama responses with field validation and failure handling.
@@ -41,34 +59,29 @@ Leaf images can contain similar colors, textures, and symptoms across different 
 
 ## How LeafLens Works
 
-1. Load `leaflens_model.keras` and the ordered labels in `class_names.json`.
-2. Resize the input to 128 x 128 RGB pixels and run the CNN.
-3. Skip Ollama only when the image is inside the configured dataset folder and confidence meets the threshold.
-4. Otherwise, ask Qwen to assess the image without seeing the CNN prediction.
-5. Ask Qwen again to review the image and both assessments.
-6. Preserve the CNN class and confidence and attach a review status.
+1. Load the saved CNN and labels and predict the input image.
+2. Obtain an independent visual health assessment from Qwen.
+3. Ask Qwen to review the image and both assessments.
+4. Return a health result only when evidence agrees and the CNN confidence meets the threshold; otherwise return uncertain.
+5. Display the photo, final health result, and supporting CNN information.
 
-| Image location | CNN confidence | Processing |
-| --- | --- | --- |
-| Inside the configured `color` folder | At least 80% | CNN only |
-| Inside the configured `color` folder | Below 80% | CNN plus Ollama assessment and review |
-| Outside the configured folder | Any score | CNN plus Ollama assessment and review |
-
-`--min-confidence` changes the threshold. `--cnn-only` explicitly skips Ollama for any image. Low confidence remains flagged even when Ollama supports the prediction.
+The default confidence threshold is 80%. Dataset location no longer bypasses
+review. Explicit `--cnn-only` skips Ollama and returns an uncertain final health
+result alongside the unreviewed CNN prediction.
 
 ## Architecture / Pipeline
 
 ```mermaid
 flowchart TD
-    A["Input leaf image"] --> B["CNN predicts class and<br/>confidence"]
-    B --> C{"Inside color folder AND<br/>confidence >= 80%?"}
-    C -->|Yes| D["Return CNN result"]
-    C -->|No| E["Qwen independently<br/>assesses image through<br/>Ollama"]
-    E --> F["Qwen reviews image and<br/>both assessments"]
-    F --> G["Python preserves CNN<br/>result and adds review<br/>status"]
+    A["Input leaf image"] --> B["CNN prediction and confidence"]
+    B --> C["Independent Ollama visual assessment"]
+    C --> D["Ollama reviews image and both assessments"]
+    D --> E{"Complete, consistent evidence<br/>and confidence at least 80%?"}
+    E -->|No| F["Uncertain - needs review"]
+    E -->|Yes| G{"Visible disease assessment"}
+    G -->|Disease symptoms| H["Diseased"]
+    G -->|No visible symptoms| I["No visible disease detected"]
 ```
-
-This shows the normal successful flow. If the first Ollama call fails, the second is skipped; the CNN result remains available with a review flag.
 
 ## Dataset
 
@@ -176,7 +189,7 @@ These runs illustrate several different outcomes:
 
 These selected examples do not establish dataset-wide accuracy. The earlier grape example also assigned approximately 30.87% to `Soybean___healthy`, illustrating class confusion.
 
-Ten regression tests passed during development. They verify software behavior, not classification quality.
+Twelve regression tests passed after the visual-health policy change. They verify software behavior, not classification quality.
 
 **Confidence** is the CNN's softmax score for one predicted class. It is not a calibrated guarantee that the prediction is correct.
 
@@ -193,9 +206,9 @@ python evaluate_leaf.py "D:\held-out-leaves"
 python evaluate_leaf.py "D:\held-out-leaves" --with-ollama --limit 100
 ```
 
-The optional sample uses a fixed seed by default. Reports include CNN accuracy and per-class counts. With Ollama enabled, they also include vision-result availability and agreement metrics. Normal routing still applies.
+The optional sample uses a fixed seed by default. Reports include CNN accuracy and per-class counts. With Ollama enabled, they also include vision-result availability and agreement metrics. Every image in this mode receives visual review.
 
-Final-label accuracy equals CNN accuracy because Ollama cannot change the final label. Two calls to the same Qwen model do not constitute an independent accuracy test, and agreement does not prove correctness. The repository does not establish a held-out accuracy figure for the saved model.
+The evaluator's final_accuracy field measures the preserved CNN class, not the new three-way health result; health-result accuracy and uncertain coverage are not yet evaluated. Two calls to the same Qwen model do not constitute an independent accuracy test, and agreement does not prove correctness. The repository does not establish a held-out accuracy figure for the saved model.
 
 Current evaluation limitation: `needs_review` is calculated as all images minus those with `models_agree`; this also counts intentionally skipped dataset images. Use a separate held-out folder for evaluation and interpret that field accordingly. Vision accuracy over all images also includes images without a vision result in its denominator.
 
@@ -269,6 +282,17 @@ ollama serve
 
 The code connects to `http://localhost:11434/api/chat` using Python's standard-library HTTP client. It does not require the Ollama Python package.
 
+## Healthy / Diseased Photo Assessment
+
+The default command displays the input photo with the final health result and
+supporting CNN class/confidence. Close the Matplotlib window to finish.
+Use `--no-show-image` for terminal-only output.
+
+The CNN health mapping uses `___healthy` versus other dataset conditions,
+including pest damage. This is supporting evidence, not a definitive visual
+diagnosis. The model has not been retrained as a binary classifier. Ollama's
+health assessment and review are required for a non-uncertain final result.
+
 ## Usage / Running Predictions
 
 ```powershell
@@ -288,7 +312,7 @@ Assessment confidence: 83.36%
 | `--min-confidence` | `0.8` | Threshold used for routing and review flags |
 | `--ollama-model` | `qwen3-vl:2b` | Installed vision model to use |
 | `--timeout` | `120` | Timeout in seconds for network operations in each Ollama request |
-| `--dataset-path` | Project's `color` folder | Override the dataset folder for prediction |
+| `--dataset-path` | Project's `color` folder | Legacy option; does not bypass visual review |
 | `--cnn-only` | Off | Skip both Ollama calls |
 
 ```powershell
@@ -297,11 +321,11 @@ python predict_leaf.py "D:\LeafLens\check\images.jpg" --timeout 240
 python predict_leaf.py "D:\LeafLens\check\images.jpg" --min-confidence 0.85
 ```
 
-Each Ollama call has its own timeout; it is not a strict total deadline for the whole pipeline. A timeout or invalid response preserves the CNN result and flags it for review. If the first assessment fails, the second review is skipped.
+Each Ollama call has its own timeout; it is not a strict total deadline for the whole pipeline. A timeout or invalid response makes the final health result uncertain while preserving the supporting CNN prediction. If the first assessment fails, the second review is skipped.
 
 Output statuses:
 
-- `dataset cnn only`: dataset image met the confidence threshold, so Ollama was skipped.
+- `dataset cnn only`: historical status; no longer produced by normal predictions.
 - `models agree`: the assessments agree, the review supports the CNN, and confidence meets the threshold.
 - `needs review`: low confidence, disagreement, uncertainty, or an Ollama error occurred.
 - `CNN only; not reviewed`: the explicit `--cnn-only` option was used.
@@ -398,6 +422,6 @@ LeafLens is an educational/research project and should not be treated as a subst
 
 ## Author
 
-Prokash — [prokashghosh996-png](https://github.com/prokashghosh996-png)
+Prokash â€” [prokashghosh996-png](https://github.com/prokashghosh996-png)
 
 Project repository: [LeafLens](https://github.com/prokashghosh996-png/LeafLens)

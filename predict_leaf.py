@@ -10,6 +10,15 @@ os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 PROJECT_PATH = Path(__file__).resolve().parent
 
 
+def health_from_class(label):
+    """Map dataset class labels to health without using the input folder as truth."""
+    if "___" not in label:
+        return "uncertain"
+    condition = label.rsplit("___", 1)[1].strip()
+    if not condition:
+        return "uncertain"
+    return "not diseased" if condition.lower() == "healthy" else "diseased"
+
 class LeafPredictor:
     def __init__(self, model_path=PROJECT_PATH / "leaflens_model.keras",
                  labels_path=PROJECT_PATH / "class_names.json"):
@@ -39,6 +48,7 @@ class LeafPredictor:
         ranked = sorted(range(len(scores)), key=scores.__getitem__, reverse=True)
         return {
             "predicted_class": self.class_names[ranked[0]],
+            "health_status": health_from_class(self.class_names[ranked[0]]),
             "confidence": scores[ranked[0]],
             "top_predictions": [
                 {"class": self.class_names[i], "confidence": scores[i]}
@@ -60,14 +70,24 @@ def combine_results(cnn, vision, review, min_confidence=0.8, errors=None):
     elif vision["predicted_class"] != cnn["predicted_class"]:
         reasons.append("vision_uncertain" if vision["predicted_class"] == "uncertain"
                        else "models_disagree")
+    if vision is not None:
+        vision_health = vision.get("health_status", "uncertain")
+        if vision_health == "uncertain":
+            reasons.append("vision_health_uncertain")
+        elif vision_health != health_from_class(cnn["predicted_class"]):
+            reasons.append("health_assessments_disagree")
     if review is None:
         reasons.append("review_unavailable")
     elif review["verdict"] != "supports":
         reasons.append("review_" + review["verdict"])
+    if review is not None and vision is not None:
+        if review.get("health_status", "uncertain") != vision.get("health_status", "uncertain"):
+            reasons.append("visual_reviews_disagree")
     if errors:
         reasons.append("ollama_error")
     return {
         "final_class": cnn["predicted_class"],
+        "health_status": ("uncertain" if reasons else vision_health),
         "confidence": cnn["confidence"],
         "confidence_note": "CNN softmax score; not calibrated probability or measured accuracy.",
         "status": "needs_review" if reasons else "models_agree",
@@ -84,18 +104,6 @@ def analyze_leaf(image_path, predictor, ollama_model="qwen3-vl:2b",
     from test_ollama import assess_leaf, review_leaf
     path = Path(image_path).resolve(strict=True)
     cnn = predictor.predict(path)
-    if is_dataset_image(path, dataset_path) and cnn["confidence"] >= min_confidence:
-        return {
-            "final_class": cnn["predicted_class"],
-            "confidence": cnn["confidence"],
-            "confidence_note": "CNN softmax score; not measured accuracy.",
-            "status": "dataset_cnn_only",
-            "review_reasons": [],
-            "cnn": cnn,
-            "ollama_assessment": None,
-            "ollama_review": None,
-            "errors": [],
-        }
     vision = review = None
     errors = []
     try:
@@ -117,22 +125,54 @@ def main():
     parser.add_argument("--min-confidence", type=float, default=0.8)
     parser.add_argument("--timeout", type=float, default=120)
     parser.add_argument("--cnn-only", action="store_true")
+    parser.add_argument("--no-show-image", dest="show_image", action="store_false", help="Print results without opening the photo window")
     parser.add_argument("--dataset-path", type=Path, default=TRAINING_DATASET_PATH,
-                        help="Dataset root; images inside skip Ollama when confidence meets threshold")
+                        help="Legacy dataset path option; visual review now runs for all images")
     args = parser.parse_args()
     if not 0 <= args.min_confidence <= 1 or args.timeout <= 0:
         parser.error("Confidence must be in [0, 1] and timeout must be positive.")
     if not args.image.is_file():
         parser.error("Image does not exist.")
     predictor = LeafPredictor()
-    result = (predictor.predict(args.image) if args.cnn_only else
+    result = (combine_results(predictor.predict(args.image), None, None, args.min_confidence) if args.cnn_only else
               analyze_leaf(args.image, predictor, args.ollama_model,
                            args.min_confidence, args.timeout, args.dataset_path))
     label = result.get("final_class", result.get("predicted_class"))
     status = result.get("status", "CNN only; not reviewed").replace("_", " ")
-    print(f"Final result: {label} ({status})")
-    print(f"Assessment confidence: {result['confidence']:.2%}")
-    #print("Assessment accuracy: not measured (requires labeled test data)")
+    health_text = {"diseased": "Diseased", "not diseased": "No visible disease detected",
+                   "uncertain": "Uncertain - needs review"}[result["health_status"]]
+    print(f"Final result: {health_text}")
+    print(f"CNN predicted class (supporting information): {label}")
+    print(f"CNN class confidence: {result['confidence']:.2%}")
+    vision = result.get("ollama_assessment")
+    if vision is not None:
+        print("Ollama assessment:", vision.get("health_status", "uncertain"))
+        print("Ollama observations:", vision["observations"])
+    else:
+        print("Ollama assessment:", "unavailable" if result.get("errors") else "not requested")
+    if result.get("ollama_review"):
+        print("Ollama review:", result["ollama_review"]["reason"])
+    for error in result.get("errors", []):
+        print("Ollama error:", error)
+    if result.get("review_reasons"):
+        print("Review reasons:", ", ".join(result["review_reasons"]))
+    if args.show_image:
+        import matplotlib.pyplot as plt
+        from PIL import Image
+        with Image.open(args.image) as image:
+            photo = image.convert("RGB")
+        fig, ax = plt.subplots(figsize=(9, 7))
+        ax.imshow(photo)
+        ax.axis("off")
+        heading = (f"{health_text} | {status}\n"
+                   f"{label}\nCNN class confidence: {result['confidence']:.2%}")
+        if vision is not None:
+            heading += "\nOllama: " + vision.get("health_status", "uncertain")
+        else:
+            heading += "\nOllama: " + ("unavailable" if result.get("errors") else "not requested")
+        ax.set_title(heading)
+        fig.tight_layout()
+        plt.show()
 
 
 if __name__ == "__main__":
