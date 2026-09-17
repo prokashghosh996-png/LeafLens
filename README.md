@@ -152,18 +152,29 @@ Observed examples during development:
 | Healthy apple, `RS_HL 5759.JPG` | `Apple___healthy` | 83.36% | Reported CLI output |
 | Healthy grape, `Mt.N.V_HL 9127.JPG` | `Grape___healthy` | 65.48% | Reproduced with original and current prediction logic |
 
-Additional user-reported CLI results:
+Latest user-reported CLI results (paths relative to the project root):
 
-| Input image | CNN prediction | Confidence | Reported status |
-| --- | --- | --- | --- |
-| Apple healthy folder, `0a553fc0-fc2c-4598-baba-3bc10191447c___RS_HL 5969.JPG` | `Apple___healthy` | 97.59% | `dataset cnn only` |
-| Image path not supplied | `Cherry_(including_sour)___healthy` | 57.69% | `needs review` |
-| Image path not supplied | `Cherry_(including_sour)___healthy` | 94.34% | `dataset cnn only` |
-| Image path not supplied | `Blueberry___healthy` | 99.71% | `dataset cnn only` |
+| Input image | Expected label / context | CNN prediction | Confidence | Reported status |
+| --- | --- | --- | --- | --- |
+| `color/Apple___healthy/0a553fc0-fc2c-4598-baba-3bc10191447c___RS_HL 5969.JPG` | `Apple___healthy` (folder label) | `Apple___healthy` | 97.59% | `dataset cnn only` |
+| `check/apple_exp_pic.jpg` | Apple suggested by filename; ground truth unverified | `Orange___Haunglongbing_(Citrus_greening)` | 90.93% | `needs review` |
+| `check/tomato_test_leaf.jpg` | Tomato suggested by filename; ground truth unverified | `Blueberry___healthy` | 99.99% | `needs review` |
+| `color/Potato___healthy/a4d1d8cb-26a2-413f-a229-021e2eea87ac___RS_HL 1819.JPG` | `Potato___healthy` (folder label) | `Soybean___healthy` | 52.36% | `needs review` |
+| `color/Cherry_(including_sour)___healthy/0b7b9ff9-4324-4ee0-a77c-6bf4b9331c6d___JR_HL 4110.JPG` | `Cherry_(including_sour)___healthy` (folder label) | `Cherry_(including_sour)___healthy` | 57.69% | `needs review` |
+| `color/Cherry_(including_sour)___healthy/1bdfdc8f-3ac6-497f-9dc3-58c7803a0ac8___JR_HL 9887 copy.JPG` | `Cherry_(including_sour)___healthy` (folder label) | `Cherry_(including_sour)___healthy` | 94.34% | `dataset cnn only` |
+| `color/Blueberry___healthy/0af69fdc-fc5f-44ac-bb75-0939611516f6___RS_HL 0323.JPG` | `Blueberry___healthy` (folder label) | `Blueberry___healthy` | 99.71% | `dataset cnn only` |
 
-The apple result matches its dataset folder label. Ground-truth labels and image paths were not supplied for the other three results, so their correctness has not been verified. The 57.69% prediction falls below the default 80% threshold; its status alone does not confirm that Ollama completed successfully.
+Cherry class names above use the canonical spelling; formatting artifacts in the pasted terminal transcript have been normalized.
 
-These examples do not establish dataset-wide accuracy. The grape example also assigned approximately 30.87% to `Soybean___healthy`, illustrating class confusion.
+These runs illustrate several different outcomes:
+
+- Apple, both cherry examples, and blueberry match their dataset folder labels. The potato image is misclassified relative to its folder label.
+- The 57.69% cherry result matches its label but still requires review because confidence is below 80%. Low confidence does not necessarily mean an incorrect prediction.
+- The external apple- and tomato-named images receive different plant predictions despite high confidence. If their filenames correctly identify their contents, these are high-confidence classification errors; the transcript alone does not verify their ground truth.
+- Images outside `color` enter the Ollama flow regardless of confidence. A `needs review` status at 90.93% or 99.99% can reflect disagreement, uncertainty, or an Ollama failure. These logs do not show which reason occurred or prove that both Ollama calls completed.
+- Ollama does not overwrite the displayed CNN label or confidence.
+
+These selected examples do not establish dataset-wide accuracy. The earlier grape example also assigned approximately 30.87% to `Soybean___healthy`, illustrating class confusion.
 
 Ten regression tests passed during development. They verify software behavior, not classification quality.
 
@@ -191,6 +202,8 @@ Current evaluation limitation: `needs_review` is calculated as all images minus 
 ## Real-World Generalization
 
 Performance on the local dataset does not establish performance on field photographs. Different lighting, backgrounds, cameras, leaf positions, and symptom appearances can create domain shift.
+
+The two external images in the Results table are preliminary checks, not a cross-dataset benchmark. Their predictions conflict with the plant names suggested by their filenames even at 90.93% and 99.99% confidence. This motivates checking ground truth and investigating generalization; it does not establish domain shift as the cause.
 
 Cross-dataset evaluation and evaluation on independently labeled field images have not been documented for the saved model. A useful next evaluation would keep those images separate from training and model selection, then report overall and per-class performance.
 
