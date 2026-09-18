@@ -8,3 +8,5 @@ __pycache__/
 *.JPG
 *.jpeg
 *.png
+
+training_runs/
