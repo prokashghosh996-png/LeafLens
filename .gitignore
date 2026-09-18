@@ -10,3 +10,6 @@ __pycache__/
 *.png
 
 training_runs/
+
+# README example screenshots
+!/docs/images/*.png

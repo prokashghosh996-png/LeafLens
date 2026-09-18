@@ -75,6 +75,28 @@ The predictor reads the model's input dimensions, resizes using bilinear interpo
 
 A class ending in `___healthy` maps to `Not diseased`; other nonempty conditions after `___` map to `Diseased`, including pest damage. Missing or empty conditions map to `Uncertain`. This status is inferred from the class, not a separate visual assessment or binary disease model.
 
+## Example predictions
+
+The following supplied test screenshots show the model's predicted labels and confidence scores. All three display a class-derived disease status of **Diseased**. These are individual examples, not a measurement of test-set accuracy.
+
+### Corn: Cercospora leaf spot / gray leaf spot
+
+![Corn leaf prediction showing a class-derived Diseased status and 72.65% CNN class confidence](docs/images/corn-leaf-spot.png)
+
+Predicted class: `Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot`. CNN class confidence: **72.65%**.
+
+### Tomato: target spot
+
+![Tomato target spot prediction showing a class-derived Diseased status and 86.57% CNN class confidence](docs/images/tomato-target-spot.png)
+
+Predicted class: `Tomato___Target_Spot`. CNN class confidence: **86.57%**.
+
+### Tomato: yellow leaf curl virus
+
+![Tomato yellow leaf curl virus prediction showing a class-derived Diseased status and 99.91% CNN class confidence](docs/images/tomato-yellow-leaf-curl.png)
+
+Predicted class: `Tomato___Tomato_Yellow_Leaf_Curl_Virus`. CNN class confidence: **99.91%**.
+
 ## Dataset inspection and training
 
 The default dataset is `color/` beside the scripts. Organize images into class folders:
@@ -179,7 +201,13 @@ The obsolete Ollama integration, standalone OpenCV experiment, old dataset check
 - For an existing training output folder, choose a new `--output` path.
 - Use `--no-show-image` when a graphical display is unavailable.
 
-LeafLens is an educational project. Class-derived disease status can be wrong, especially for unfamiliar plants, backgrounds, or field conditions.
+## Disclaimer
+
+LeafLens is intended for educational and research purposes. Its predictions are not a confirmed plant disease diagnosis or a substitute for assessment by a qualified agricultural professional or plant pathologist.
+
+The displayed disease status is derived from the predicted class. Confidence is the model's score for that class; it does not establish diagnostic certainty or overall accuracy. A high-confidence prediction can be incorrect, and a "Not diseased" result does not guarantee that a plant is healthy. Performance may vary with plant species, image quality, lighting, backgrounds, and growing conditions.
+
+The example screenshots illustrate model outputs only; they do not establish independently verified diagnoses or performance on unseen data. Seek professional advice before making treatment or crop-management decisions based on these results.
 
 ## Author
 
