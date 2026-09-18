@@ -39,6 +39,50 @@ class LeafPredictor:
         if self.model.output_shape[-1] != len(self.class_names):
             raise ValueError("Model output and class_names.json do not match.")
 
+    def grad_cam(self, image_path, class_index=None):
+        tf = self.tf
+        image = tf.keras.utils.load_img(image_path, interpolation="bilinear")
+        original_size = (image.height, image.width)
+        resized = tf.keras.utils.load_img(
+            image_path, target_size=self.image_size, interpolation="bilinear")
+        batch = tf.expand_dims(tf.keras.utils.img_to_array(resized), axis=0)
+
+        feature_layer = next(
+            (index, layer) for index, layer in reversed(list(enumerate(self.model.layers)))
+            if len(layer.output.shape) == 4)
+        feature_index, feature_layer = feature_layer
+        feature_model = tf.keras.models.Model(self.model.inputs, feature_layer.output)
+        classifier_input = tf.keras.Input(shape=feature_layer.output.shape[1:])
+        classifier_output = classifier_input
+        for layer in self.model.layers[feature_index + 1:]:
+            classifier_output = layer(classifier_output)
+        classifier_model = tf.keras.models.Model(classifier_input, classifier_output)
+        with tf.GradientTape() as tape:
+            feature_maps = feature_model(batch, training=False)
+            tape.watch(feature_maps)
+            predictions = classifier_model(feature_maps, training=False)
+            if class_index is None:
+                class_index = tf.argmax(predictions[0])
+            score = predictions[:, class_index]
+        gradients = tape.gradient(score, feature_maps)
+        weights = tf.reduce_mean(gradients, axis=(1, 2), keepdims=True)
+        heatmap = tf.reduce_sum(weights * feature_maps, axis=-1)[0]
+        heatmap = tf.maximum(heatmap, 0)
+        heatmap = heatmap / (tf.reduce_max(heatmap) + tf.keras.backend.epsilon())
+        return tf.image.resize(heatmap[..., tf.newaxis], original_size)[..., 0].numpy(), image
+
+    def save_grad_cam(self, image_path, output_path, class_index=None):
+        import matplotlib.pyplot as plt
+
+        heatmap, image = self.grad_cam(image_path, class_index)
+        figure, axis = plt.subplots(figsize=(9, 7))
+        axis.imshow(image)
+        axis.imshow(heatmap, cmap="jet", alpha=0.45, vmin=0, vmax=1)
+        axis.axis("off")
+        figure.tight_layout(pad=0)
+        figure.savefig(output_path, dpi=150, bbox_inches="tight", pad_inches=0)
+        plt.close(figure)
+
     def predict(self, image_path):
         tf = self.tf
         image = tf.keras.utils.load_img(
@@ -66,6 +110,10 @@ def main():
     parser.add_argument("image", type=Path)
     parser.add_argument("--model", type=Path, default=PROJECT_PATH / "leaflens_model.keras")
     parser.add_argument("--cnn-only", action="store_true", help="Compatibility option; predictions are always CNN-only")
+    parser.add_argument("--heatmap", type=Path,
+                        help="Save a Grad-CAM heatmap overlay to this PNG path")
+    parser.add_argument("--show-heatmap", action="store_true",
+                        help="Display the photo with a Grad-CAM heatmap overlay")
     parser.add_argument("--no-show-image", dest="show_image", action="store_false",
                         help="Print results without opening the photo window")
     args = parser.parse_args()
@@ -81,13 +129,33 @@ def main():
     print("Top predictions:")
     for item in result["top_predictions"]:
         print(f"  {item['class']}: {item['confidence']:.2%}")
-    if args.show_image:
+    heatmap = None
+    photo = None
+    if args.heatmap or args.show_heatmap:
+        heatmap, pil_image = predictor.grad_cam(
+            args.image, class_index=predictor.class_names.index(label))
+        if args.heatmap:
+            import matplotlib.pyplot as plt
+            figure, axis = plt.subplots(figsize=(9, 7))
+            axis.imshow(pil_image)
+            axis.imshow(heatmap, cmap="jet", alpha=0.45, vmin=0, vmax=1)
+            axis.axis("off")
+            figure.tight_layout(pad=0)
+            figure.savefig(args.heatmap, dpi=150, bbox_inches="tight", pad_inches=0)
+            plt.close(figure)
+            print(f"Grad-CAM heatmap saved to: {args.heatmap}")
+        if args.show_heatmap:
+            photo = pil_image
+    if args.show_image or args.show_heatmap:
         import matplotlib.pyplot as plt
-        from PIL import Image
-        with Image.open(args.image) as image:
-            photo = image.convert("RGB")
+        if photo is None:
+            from PIL import Image
+            with Image.open(args.image) as image:
+                photo = image.convert("RGB")
         fig, ax = plt.subplots(figsize=(9, 7))
         ax.imshow(photo)
+        if heatmap is not None:
+            ax.imshow(heatmap, cmap="jet", alpha=0.45, vmin=0, vmax=1)
         ax.axis("off")
         heading = (f"Disease status: {health_text} (class-derived)\n"
                    f"{label}\nCNN class confidence: {result['confidence']:.2%}")
