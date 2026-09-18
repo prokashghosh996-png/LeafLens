@@ -2,6 +2,12 @@
 
 LeafLens classifies plant leaf images with TensorFlow/Keras and displays a disease status derived from the predicted class. The current workflow uses the saved classifier directly; Ollama is not required.
 
+## Current scope and future generalization
+
+**LeafLens currently works only within the scope of the provided dataset (`color/`). It is not yet a generalized plant disease detection system.** The current examples demonstrate behavior on the provided dataset; they do not establish reliable performance on unrelated images, new plant classes, or real-world field photographs.
+
+Further training on more diverse, independently labeled data is planned to improve generalization. Future work will include different lighting, backgrounds, cameras, and growing conditions, followed by evaluation on separate external datasets. Generalized performance remains a future goal and must be verified after that training.
+
 ## Workflow
 
 Prediction uses the existing saved model. Training is optional and produces a new model with matching labels.
@@ -24,6 +30,8 @@ flowchart TD
         Q --> R["Predicted class, confidence, and top three classes"]
         R --> S["Derive disease status from class label"]
         S --> T["Print results and optionally display the photo"]
+        R --> U["Optional Grad-CAM for the predicted class"]
+        U --> V["Display overlay or save a PNG"]
     end
 
     subgraph Evaluation["External evaluation"]
@@ -68,12 +76,28 @@ Close the photo window to finish the command.
 | --- | --- |
 | `image` | Required image path |
 | `--model` | Model path; defaults to the project's `leaflens_model.keras` |
-| `--no-show-image` | Print results without opening the photo window |
+| `--no-show-image` | Suppress the default photo window; `--show-heatmap` still opens an overlay window |
+| `--heatmap PATH` | Save a Grad-CAM overlay to a PNG path |
+| `--show-heatmap` | Display the image with a Grad-CAM overlay |
 | `--cnn-only` | Compatibility option; predictions always use only the classifier |
 
 The predictor reads the model's input dimensions, resizes using bilinear interpolation, and loads the labels beside the model. Normalization is embedded in the model.
 
 A class ending in `___healthy` maps to `Not diseased`; other nonempty conditions after `___` map to `Diseased`, including pest damage. Missing or empty conditions map to `Uncertain`. This status is inferred from the class, not a separate visual assessment or binary disease model.
+
+### Display or save a heatmap
+
+```powershell
+# Display the prediction with a Grad-CAM overlay:
+python predict_leaf.py "check/apple_exp_pic.jpg" --show-heatmap
+
+# Save an overlay without opening a photo window:
+python predict_leaf.py "check/apple_exp_pic.jpg" --heatmap docs/images/new-heatmap.png --no-show-image
+```
+
+The output directory must already exist. The saved PNG contains the image and overlay; the interactive window also includes the prediction title. `--heatmap` alone saves the overlay and displays it in the default window. `--show-heatmap` explicitly opens the overlay window even when `--no-show-image` is supplied. Both options can be combined with `--model`.
+
+Heatmap generation explains the selected predicted class and does not change its label, confidence, or derived disease status.
 
 ## Example predictions
 
@@ -91,6 +115,22 @@ Predicted classes shown above, from left to right:
 - `Tomato___Target_Spot`
 - `Tomato___Tomato_Yellow_Leaf_Curl_Virus`
 - `Grape___healthy`
+
+## Experiment results: Grad-CAM heatmaps
+
+The following saved experiment figures show heatmap overlays for the four example classes. Click a figure to view it at full size.
+
+| Corn: leaf spot | Tomato: target spot | Tomato: yellow leaf curl | Grape: healthy |
+| :---: | :---: | :---: | :---: |
+| [![Grad-CAM overlay for corn leaf spot](docs/images/Figure_1.png)](docs/images/Figure_1.png) | [![Grad-CAM overlay for tomato target spot](docs/images/Figure_2.png)](docs/images/Figure_2.png) | [![Grad-CAM overlay for tomato yellow leaf curl virus](docs/images/Figure_3.png)](docs/images/Figure_3.png) | [![Grad-CAM overlay for healthy grape](docs/images/Figure_4.png)](docs/images/Figure_4.png) |
+| Diseased | Diseased | Diseased | Not diseased |
+| Confidence: **72.65%** | Confidence: **86.57%** | Confidence: **99.82%** | Confidence: **85.53%** |
+
+The status row follows the class-to-status mapping. Confidence values are transcribed from these heatmap figures. The yellow-leaf-curl heatmap records **99.82%**, whereas the earlier prediction screenshot records **99.91%**; these are retained as separate recorded outputs.
+
+Grad-CAM uses gradients of the selected class score with respect to the model's last four-dimensional feature output. It combines those features into a normalized map and overlays it on the original image. Warmer colors indicate higher values in that map; they are not disease-severity measurements or confirmed lesion boundaries. Maps are normalized separately for each image.
+
+In these figures, the target-spot and healthy-grape overlays cover broad parts of the leaf. The corn and yellow-leaf-curl overlays also highlight areas near image or leaf edges. These visualizations help inspect model behavior, but do not prove that a prediction is correct or that the model has learned disease-specific features. These four examples are qualitative experiment results, not a dataset-wide accuracy benchmark.
 
 ## Dataset inspection and training
 
@@ -167,13 +207,13 @@ The evaluator does not check for overlap with training data. Accuracy describes 
 python -B -m unittest test_pipeline test_training -v
 ```
 
-The tests cover health-label mapping, terminal prediction without network calls, deterministic splits, duplicate grouping, complete/disjoint image assignment, and rejection of classes with too few groups. They verify software behavior, not classification quality.
+The tests cover health-label mapping, terminal prediction without network calls, deterministic splits, duplicate grouping, complete/disjoint image assignment, and rejection of classes with too few groups. They verify software behavior, not classification quality. The current tests do not cover Grad-CAM generation or heatmap export.
 
 ## Project files
 
 | File or folder | Role |
 | --- | --- |
-| `predict_leaf.py` | Saved-model inference and photo display |
+| `predict_leaf.py` | Saved-model inference, disease-status mapping, photo display, and Grad-CAM generation/display/export |
 | `evaluate_leaf.py` | Evaluation against class-folder labels |
 | `train_plant_disease.py` | Dataset inspection, splitting, MobileNetV2 training, and test metrics |
 | `dataset_config.py` | Default dataset location |
@@ -185,8 +225,20 @@ The tests cover health-label mapping, terminal prediction without network calls,
 | `check/` | Sample images for manual predictions |
 | `training_runs/` | Local training and inspection artifacts |
 | `.venv312/` | Local Python environment |
+| `docs/images/` | README prediction screenshots and experiment heatmaps (`Figure_1.png` through `Figure_4.png`) |
+| `README.md` | Setup, workflow, usage, experiment results, and project limitations |
+| `__pycache__/` | Automatically generated Python bytecode cache |
+| `.git/` | Repository history and Git metadata |
 
 The obsolete Ollama integration, standalone OpenCV experiment, old dataset checker/reports, and standalone label-generation script have been removed. Dataset inspection and label generation are handled by `train_plant_disease.py`.
+
+## Recent updates
+
+- Added Grad-CAM generation to `LeafPredictor`, with `--show-heatmap` for display and `--heatmap` for PNG export.
+- Added four saved experiment heatmaps alongside the existing prediction examples, with both galleries arranged in a single row.
+- Updated the workflow diagram, command options, file descriptions, and heatmap interpretation.
+- Clarified that the current project is limited to the provided dataset and that broader training and external validation are planned.
+- Retained the earlier disease-status display, classifier-only prediction, dataset inspection/training workflow, and removal of obsolete scripts.
 
 ## Troubleshooting
 
@@ -197,6 +249,8 @@ The obsolete Ollama integration, standalone OpenCV experiment, old dataset check
 - Use `--no-show-image` when a graphical display is unavailable.
 
 ## Disclaimer
+
+LeafLens currently targets only the provided dataset; reliable performance beyond that dataset has not been established. Further training and independent evaluation are planned to work toward generalization.
 
 LeafLens is intended for educational and research purposes. Its predictions are not a confirmed plant disease diagnosis or a substitute for assessment by a qualified agricultural professional or plant pathologist.
 
