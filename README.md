@@ -77,25 +77,20 @@ A class ending in `___healthy` maps to `Not diseased`; other nonempty conditions
 
 ## Example predictions
 
-The following supplied test screenshots show the model's predicted labels and confidence scores. All three display a class-derived disease status of **Diseased**. These are individual examples, not a measurement of test-set accuracy.
+These supplied test screenshots show individual model outputs, not test-set accuracy or independently verified diagnoses. Disease status is derived from the predicted class. Click a photo to view it at full size.
 
-### Corn: Cercospora leaf spot / gray leaf spot
+| Corn: leaf spot | Tomato: target spot | Tomato: yellow leaf curl | Grape: healthy |
+| :---: | :---: | :---: | :---: |
+| [![Corn leaf spot prediction](docs/images/corn-leaf-spot.png)](docs/images/corn-leaf-spot.png) | [![Tomato target spot prediction](docs/images/tomato-target-spot.png)](docs/images/tomato-target-spot.png) | [![Tomato yellow leaf curl virus prediction](docs/images/tomato-yellow-leaf-curl.png)](docs/images/tomato-yellow-leaf-curl.png) | [![Healthy grape prediction](docs/images/grape-healthy.png)](docs/images/grape-healthy.png) |
+| Diseased | Diseased | Diseased | Not diseased |
+| Confidence: **72.65%** | Confidence: **86.57%** | Confidence: **99.91%** | Confidence: **85.53%** |
 
-![Corn leaf prediction showing a class-derived Diseased status and 72.65% CNN class confidence](docs/images/corn-leaf-spot.png)
+Predicted classes shown above, from left to right:
 
-Predicted class: `Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot`. CNN class confidence: **72.65%**.
-
-### Tomato: target spot
-
-![Tomato target spot prediction showing a class-derived Diseased status and 86.57% CNN class confidence](docs/images/tomato-target-spot.png)
-
-Predicted class: `Tomato___Target_Spot`. CNN class confidence: **86.57%**.
-
-### Tomato: yellow leaf curl virus
-
-![Tomato yellow leaf curl virus prediction showing a class-derived Diseased status and 99.91% CNN class confidence](docs/images/tomato-yellow-leaf-curl.png)
-
-Predicted class: `Tomato___Tomato_Yellow_Leaf_Curl_Virus`. CNN class confidence: **99.91%**.
+- `Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot`
+- `Tomato___Target_Spot`
+- `Tomato___Tomato_Yellow_Leaf_Curl_Virus`
+- `Grape___healthy`
 
 ## Dataset inspection and training
 
